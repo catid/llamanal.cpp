@@ -19,7 +19,7 @@ TEST: 0.23096466064453125
 TEST: 0.23759722709655762
 ```
 
-If I replace the long input prompt with one that just says "Hello", the time taken is not dramatically increased:
+If I replace the long input prompt with one that just says "Hello", the time taken is not dramatically decreased:
 
 ```
 TEST: 0.14011812210083008
