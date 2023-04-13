@@ -9,18 +9,23 @@
 #include <boost/scope_exit.hpp>
 #include <boost/filesystem.hpp>
 
+#define DEFAULT_MODEL "../models/ggml-LLaMa-65B-q4_0.bin"
+
 using namespace analysis;
 
 
 //------------------------------------------------------------------------------
 // Application
 
-void main_analysis(const std::string& path_)
+void main_analysis(const std::string& path_, const std::string& model_)
 {
     // Expand ~ and .. type stuff
     BOOST_LOG_TRIVIAL(debug) << "Input path: " << path_;
+    BOOST_LOG_TRIVIAL(debug) << "Input model: " << model_;
     std::string path = boost::filesystem::canonical(path_).string();
+    std::string model = boost::filesystem::canonical(model_).string();
     BOOST_LOG_TRIVIAL(debug) << "Canonicalized input path: " << path;
+    BOOST_LOG_TRIVIAL(debug) << "Canonicalized input model: " << model;
 
     int files_checked = 0;
 
@@ -45,9 +50,9 @@ void main_analysis(const std::string& path_)
             BOOST_LOG_TRIVIAL(debug) << "Function from " << file_path << ":\n```cpp\n" << code << "\n```";
         };
 
-        BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* " << functions_checked << " functions from " << file_path;
-
         extract_cpp_functions(file_path, file_contents, file_length_in_bytes, func_handler);
+
+        BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* " << functions_checked << " functions from " << file_path;
     };
 
     supported_file_types.push_back({"cc", cpp_handler});
@@ -88,8 +93,9 @@ int main(int argc, char* argv[]) {
         po::options_description desc("Available options");
         desc.add_options()
             ("help,h", "Print usage")
-            ("path,p", po::value<std::string>(), "Path to the directory or file")
             ("verbose,v", "Verbose output")
+            ("path,p", po::value<std::string>(), "Path to the directory or file")
+            ("model,m", "Path to the model file.  Default: " DEFAULT_MODEL)
         ;
 
         po::positional_options_description positional;
@@ -100,6 +106,7 @@ int main(int argc, char* argv[]) {
         po::notify(vm);
 
         std::string path = vm.count("path") > 0 ? vm["path"].as<std::string>() : "";
+        std::string model = vm.count("model") > 0 ? vm["model"].as<std::string>() : DEFAULT_MODEL;
         bool verbose = vm.count("verbose") > 0;
 
         init_logging(verbose);
@@ -112,7 +119,7 @@ int main(int argc, char* argv[]) {
             return -1;
         }
 
-        main_analysis(path);
+        main_analysis(path, model);
     } catch (const po::error& e) {
         BOOST_LOG_TRIVIAL(error) << "Error parsing options: " << e.what() << std::endl;
         return -2;
