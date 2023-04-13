@@ -73,7 +73,7 @@ void create_conversation_template(
 //------------------------------------------------------------------------------
 // Output Parsing
 
-bool find_first_number_between_0_and_1(const std::string& s, float& found)
+bool find_first_number_between_0_and_1(const std::string& s, float& out_found)
 {
     std::regex pattern(R"((?<![0-9.])0(\.\d+)?(?!\d)|(?<![0-9.])1(\.\d+)?(?!\d))");
     std::smatch matches;
@@ -84,7 +84,7 @@ bool find_first_number_between_0_and_1(const std::string& s, float& found)
         if (start_index == 0 || s[start_index - 1] != '-') {
             float f = std::stof(match.str());
             if (f >= 0 && f <= 1) {
-                found = f;
+                out_found = f;
                 return true;
             }
         }

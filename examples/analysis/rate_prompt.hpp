@@ -1,6 +1,9 @@
 #ifndef RATE_PROMPT_HPP
 #define RATE_PROMPT_HPP
 
+#include <vector>
+#include <string>
+
 namespace analysis {
 
 
@@ -24,11 +27,11 @@ std::string decorate_role(const std::string& role);
 // Helper: Create a string prompt for an LLM given the input messages.
 void create_conversation_template(
     std::string& out_prompt,
-    std::vector<std::string>& stop_strs,
+    std::vector<std::string>& out_stop_strs,
     const std::vector<Message>& messages,
     const std::string& custom_start = "",
     const std::string& user_role = "Human",
-    const std::string& assistant_role = "Assistant")
+    const std::string& assistant_role = "Assistant");
 
 
 //------------------------------------------------------------------------------
@@ -36,7 +39,7 @@ void create_conversation_template(
 
 // Returns true if a number was found, and sets `found` to the value.
 // Returns false if no number was found.
-bool find_first_number_between_0_and_1(const std::string& s, float& found);
+bool find_first_number_between_0_and_1(const std::string& s, float& out_found);
 
 
 } // namespace analysis

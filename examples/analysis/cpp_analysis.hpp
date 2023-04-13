@@ -3,8 +3,19 @@
 
 #include <vector>
 #include <string>
+#include <functional>
 
 namespace analysis {
+
+
+//------------------------------------------------------------------------------
+// AST Parsing
+
+// Extract all CPP functions from a file provided as a memory buffer
+void extract_cpp_functions(
+    const char* file_contents,
+    size_t size,
+    std::function<void(const std::string &)> func_processor);
 
 
 //------------------------------------------------------------------------------

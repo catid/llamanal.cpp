@@ -2,26 +2,25 @@
 
 #include "rate_prompt.hpp"
 
-#include <iostream>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <memory>
 #include <clang-c/Index.h>
 
 namespace analysis {
 
 
 //------------------------------------------------------------------------------
-// Tools
+// AST Parsing
 
 static bool is_function(CXCursorKind kind) {
     return kind == CXCursor_CXXMethod || kind == CXCursor_FunctionDecl;
 }
 
-CXChildVisitResult visitor(CXCursor cursor, CXCursor parent, CXClientData client_data) {
-    auto *data = static_cast<std::vector<CXCursor> *>(client_data);
+CXChildVisitResult visitor(CXCursor cursor, CXCursor /*parent*/, CXClientData client_data) {
+    auto *data = static_cast<std::vector<CXCursor>*>(client_data);
     CXSourceLocation location = clang_getCursorLocation(cursor);
     CXFile file;
     clang_getSpellingLocation(location, &file, nullptr, nullptr, nullptr);
@@ -46,9 +45,10 @@ std::string get_code_block(const CXCursor &cursor, const std::string &file_conte
     return code_block;
 }
 
-std::vector<CXCursor> extract_functions(const std::string &file_path) {
+std::vector<CXCursor> extract_functions_from_memory(const char* file_contents, size_t size) {
     CXIndex index = clang_createIndex(0, 0);
-    CXTranslationUnit tu = clang_parseTranslationUnit(index, file_path.c_str(), nullptr, 0, nullptr, 0, CXTranslationUnit_None);
+    CXUnsavedFile unsaved_file = { "in_memory_file.cpp", file_contents, static_cast<unsigned long>(size) };
+    CXTranslationUnit tu = clang_parseTranslationUnit(index, "in_memory_file.cpp", nullptr, 0, &unsaved_file, 1, CXTranslationUnit_None);
 
     std::vector<CXCursor> functions;
     clang_visitChildren(clang_getTranslationUnitCursor(tu), visitor, &functions);
@@ -59,52 +59,19 @@ std::vector<CXCursor> extract_functions(const std::string &file_path) {
     return functions;
 }
 
-std::string airate_cpp(const std::string &file_path) {
-    std::ifstream file(file_path);
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string file_contents = buffer.str();
+void extract_cpp_functions(
+    const char* file_contents,
+    size_t size,
+    std::function<void(const std::string &)> func_processor)
+{
+    std::string file_contents_str(file_contents, size);
+    std::vector<CXCursor> functions = extract_functions_from_memory(file_contents, size);
 
-    std::vector<CXCursor> functions = extract_functions(file_path);
-    std::string markdown_str;
-
-    for (size_t idx = 0; idx < functions.size(); ++idx) {
-        std::string code_block = get_code_block(functions[idx], file_contents);
-        float score = cpp_oracle(code_block);
-        markdown_str += "\n  - Code block " + std::to_string(idx + 1) + ":\n";
-        markdown_str += "    ```cpp\n" + code_block + "\n    ```\n";
-        markdown_str += "    Score: " + std::to_string(score) + "\n";
+    for (const auto &function : functions) {
+        std::string code_block = get_code_block(function, file_contents_str);
+        func_processor(code_block);
     }
-
-    return markdown_str;
 }
-
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <file_path>" << std::endl;
-        return 1;
-    }
-
-    std::string file_path = argv[1];
-    std::string result = airate_cpp(file_path);
-    std::cout << result << std::endl;
-
-    return 0;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 //------------------------------------------------------------------------------
@@ -114,8 +81,8 @@ void ask_cpp_expert_score(
     std::string& out_prompt,
     std::vector<std::string>& out_stop_strs,
     const std::string& code,
-    const std::string& user_role_ = "Human",
-    const std::string& assistant_role_ = "Expert")
+    const std::string& user_role_,
+    const std::string& assistant_role_)
 {
     std::string user_role = normalize_role(user_role_);
     std::string assistant_role = normalize_role(assistant_role_);
