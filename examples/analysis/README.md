@@ -55,6 +55,9 @@ I'd recommend running this on a computer with 64GB of RAM.
 sudo apt-get update
 sudo apt-get install -y git cmake g++ make libboost-all-dev
 
+# For speed
+sudo apt-get install libopenblas-dev
+
 # For C++ analysis
 sudo apt-get install libclang-dev clang-15
 
@@ -72,7 +75,7 @@ rm -rf ggml-LLaMa-65B
 # Build the software
 mkdir build
 cd build
-cmake ..
+cmake -DLLAMA_OPENBLAS=ON ..
 make -j
 
 # Test it out on its own code

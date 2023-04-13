@@ -49,7 +49,7 @@ bool Oracle::QueryRating(std::string prompt, float& rating)
 
     const int NumThreads = 24;
 
-    if (::llama_eval(Context, tokens.data(), 1, 0, NumThreads)) {
+    if (::llama_eval(Context, tokens.data(), tokens.size(), 0, NumThreads)) {
         BOOST_LOG_TRIVIAL(error) << "llama_eval failed";
         return false;
     }
@@ -67,7 +67,10 @@ bool Oracle::QueryRating(std::string prompt, float& rating)
 
         llama_token id = ::llama_sample_top_p_top_k(Context, nullptr, 0, top_k, top_p, temp, repeat_penalty);
 
+        BOOST_LOG_TRIVIAL(error) << "id[" << i << "] = " << id;
+
         if (id == llama_token_eos()) {
+            BOOST_LOG_TRIVIAL(error) << "EOS";
             break;
         }
 
@@ -75,7 +78,19 @@ bool Oracle::QueryRating(std::string prompt, float& rating)
 
         bool found = find_first_number_between_0_and_1(response, rating);
         if (found && is_number_complete(response)) {
+            BOOST_LOG_TRIVIAL(error) << "found number";
             return true;
+        }
+
+        if (i == max_output_tokens - 1) {
+            break;
+        }
+
+        tokens.push_back(id);
+
+        if (::llama_eval(Context, tokens.data(), tokens.size(), 0, NumThreads)) {
+            BOOST_LOG_TRIVIAL(error) << "llama_eval failed";
+            return false;
         }
     }
 

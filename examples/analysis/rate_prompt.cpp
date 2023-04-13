@@ -2,7 +2,6 @@
 #include "logging.hpp"
 
 #include <iostream>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -74,24 +73,42 @@ void create_conversation_template(
 //------------------------------------------------------------------------------
 // Output Parsing
 
-bool find_first_number_between_0_and_1(const std::string& s, float& out_found)
-{
-    std::regex pattern(R"((?<![0-9.])0(\.\d+)?(?!\d)|(?<![0-9.])1(\.\d+)?(?!\d))");
-    std::smatch matches;
+bool find_first_number_between_0_and_1(const std::string &s, float &out_found) {
+    BOOST_LOG_TRIVIAL(info) << "INPUT = '" << s << "'";
 
-    for (auto it = std::sregex_iterator(s.begin(), s.end(), pattern); it != std::sregex_iterator(); ++it) {
-        auto match = *it;
-        int start_index = match.position();
-        if (start_index == 0 || s[start_index - 1] != '-') {
-            float f = std::stof(match.str());
-            if (f >= 0 && f <= 1) {
-                out_found = f;
-                return true;
+    size_t i = 0;
+    size_t length = s.length();
+    bool found_number = false;
+
+    while (i < length) {
+        if ((i == 0 || (!isdigit(s[i - 1]) && s[i - 1] != '.')) && (s[i] == '0' || s[i] == '1')) {
+            size_t start_index = i;
+            bool decimal_point_found = false;
+            i++;
+
+            while (i < length && (isdigit(s[i]) || (!decimal_point_found && s[i] == '.'))) {
+                if (s[i] == '.') {
+                    decimal_point_found = true;
+                }
+                i++;
             }
+
+            if ((i == length || !isdigit(s[i])) && (start_index == 0 || s[start_index - 1] != '-')) {
+                std::string number_str = s.substr(start_index, i - start_index);
+                float f = std::stof(number_str);
+
+                if (f >= 0 && f <= 1) {
+                    out_found = f;
+                    found_number = true;
+                    break;
+                }
+            }
+        } else {
+            i++;
         }
     }
 
-    return false;
+    return found_number;
 }
 
 bool is_number_complete(const std::string& s)
