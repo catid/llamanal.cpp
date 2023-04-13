@@ -13,6 +13,8 @@ add_executable(${TARGET}
     walk_directory.hpp
     logging.cpp
     logging.hpp
+    oracle.cpp
+    oracle.hpp
 )
 
 # For command-line argument parsing

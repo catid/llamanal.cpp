@@ -11,6 +11,9 @@
 
 #define DEFAULT_MODEL "../models/ggml-LLaMa-65B-q4_0.bin"
 
+#include "common.h"
+#include "llama.h"
+
 using namespace analysis;
 
 
@@ -47,7 +50,14 @@ void main_analysis(const std::string& path_, const std::string& model_)
 
         auto func_handler = [&](const std::string &code) {
             ++functions_checked;
-            BOOST_LOG_TRIVIAL(debug) << "Function from " << file_path << ":\n```cpp\n" << code << "\n```";
+            BOOST_LOG_TRIVIAL(trace) << "Function from " << file_path << ":\n```cpp\n" << code << "\n```";
+
+            // Generate prompt for LLM
+            std::string prompt;
+            std::vector<std::string> stop_strs;
+            ask_cpp_expert_score(prompt, stop_strs, code);
+
+            //auto tokens = ::llama_tokenize(ctx, params.prompt, true);
         };
 
         extract_cpp_functions(file_path, file_contents, file_length_in_bytes, func_handler);
@@ -83,6 +93,13 @@ void main_analysis(const std::string& path_, const std::string& model_)
 
 namespace po = boost::program_options;
 
+struct counter { int count = 0; };
+void validate(boost::any& v, std::vector<std::string> const& /*xs*/, counter*, long)
+{
+    if (v.empty()) v = counter{1};
+    else ++boost::any_cast<counter&>(v).count;
+}
+
 int main(int argc, char* argv[]) {
     // Call stop_logging() before terminating.
     BOOST_SCOPE_EXIT_ALL() {
@@ -90,10 +107,12 @@ int main(int argc, char* argv[]) {
     };
 
     try {
+        counter verbose_level;
+
         po::options_description desc("Available options");
         desc.add_options()
             ("help,h", "Print usage")
-            ("verbose,v", "Verbose output")
+            ("verbose,v", po::value(&verbose_level)->zero_tokens(), "Increase verbosity of logging (can be specified multiple times)")
             ("path,p", po::value<std::string>(), "Path to the directory or file")
             ("model,m", "Path to the model file.  Default: " DEFAULT_MODEL)
         ;
@@ -107,7 +126,8 @@ int main(int argc, char* argv[]) {
 
         std::string path = vm.count("path") > 0 ? vm["path"].as<std::string>() : "";
         std::string model = vm.count("model") > 0 ? vm["model"].as<std::string>() : DEFAULT_MODEL;
-        bool verbose = vm.count("verbose") > 0;
+
+        int verbose = verbose_level.count;
 
         init_logging(verbose);
 

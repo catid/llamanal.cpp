@@ -25,7 +25,7 @@ namespace keywords = boost::log::keywords;
 using file_sink_t = sinks::asynchronous_sink<sinks::text_file_backend>;
 static boost::shared_ptr<file_sink_t> m_file_sink;
 
-void init_file_logging()
+void init_file_logging(int verbose)
 {
     boost::shared_ptr<logging::core> core = logging::core::get();
 
@@ -52,13 +52,21 @@ void init_file_logging()
         % fmtTimeStamp % fmtSeverity % boost::log::expressions::smessage;
     m_file_sink->set_formatter(logFmt);
 
+    if (verbose == 0) {
+        m_file_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    } else if (verbose == 1) {
+        m_file_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
+    } else {
+        m_file_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::trace);
+    }
+
     // Create a background thread for logging
     m_file_sink->locked_backend()->auto_flush(true);
 
     // Add the sink to the logging core
     core->add_sink(m_file_sink);
 
-    BOOST_LOG_TRIVIAL(debug) << "Logging to: " << log_file_name;
+    BOOST_LOG_TRIVIAL(info) << "Logging to: " << log_file_name;
 }
 
 void stop_file_logging()
@@ -77,7 +85,7 @@ void stop_file_logging()
 using console_sink_t = sinks::asynchronous_sink<sinks::text_ostream_backend>;
 static boost::shared_ptr<console_sink_t> m_console_sink;
 
-void init_console_logging(bool verbose)
+void init_console_logging(int verbose)
 {
     boost::shared_ptr<logging::core> core = logging::core::get();
 
@@ -98,10 +106,12 @@ void init_console_logging(bool verbose)
         % fmtTimeStamp % fmtSeverity % boost::log::expressions::smessage;
     m_console_sink->set_formatter(logFmt);
 
-    if (verbose) {
+    if (verbose == 0) {
+        m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    } else if (verbose == 1) {
         m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
     } else {
-        m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+        m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::trace);
     }
 
     // Add the sink to the logging core
@@ -121,7 +131,7 @@ void stop_console_logging()
 //------------------------------------------------------------------------------
 // Logging Initialization
 
-void init_logging(bool verbose)
+void init_logging(int verbose)
 {
     boost::shared_ptr<logging::core> core = logging::core::get();
 
@@ -132,10 +142,12 @@ void init_logging(bool verbose)
     core->remove_all_sinks();
 
     init_console_logging(verbose);
-    init_file_logging();
+    init_file_logging(verbose);
 
-    if (verbose) {
-        BOOST_LOG_TRIVIAL(info) << "Verbose logging enabled.";
+    if (verbose == 1) {
+        BOOST_LOG_TRIVIAL(info) << "Debug logging enabled.";
+    } else if (verbose >= 2) {
+        BOOST_LOG_TRIVIAL(info) << "Trace+debug logging enabled.";
     }
 }
 

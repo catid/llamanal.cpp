@@ -17,7 +17,7 @@ namespace analysis {
 //------------------------------------------------------------------------------
 // Logging Initialization
 
-void init_logging(bool verbose);
+void init_logging(int verbose);
 void stop_logging();
 
 
