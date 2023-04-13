@@ -29,9 +29,11 @@ void init_file_logging()
 {
     boost::shared_ptr<logging::core> core = logging::core::get();
 
+    const char *log_file_name = "analysis_log.md";
+
     // Create a rotating file sink up to 10 MB
     boost::shared_ptr<sinks::text_file_backend> backend = boost::make_shared<sinks::text_file_backend>(
-        keywords::file_name = "analysis_log.md"
+        keywords::file_name = log_file_name
         // We don't want to rotate the file because it will lose data the user probably cares about
         // e.g. output of analysis
         //keywords::rotation_size = 10 * 1024 * 1024
@@ -56,7 +58,7 @@ void init_file_logging()
     // Add the sink to the logging core
     core->add_sink(m_file_sink);
 
-    BOOST_LOG_TRIVIAL(debug) << "Logging to: analysis_%N.md";
+    BOOST_LOG_TRIVIAL(debug) << "Logging to: " << log_file_name;
 }
 
 void stop_file_logging()
