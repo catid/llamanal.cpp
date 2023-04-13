@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(analysis LANGUAGES CXX)
+project(analysis LANGUAGES C CXX)
 set(TARGET analysis)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -28,4 +28,9 @@ if(ENABLE_CPP_SUPPORT)
     target_sources(${TARGET} PRIVATE cpp_analysis.cpp cpp_analysis.hpp)
 endif()
 
-target_link_libraries(${TARGET} PRIVATE common llama ${CMAKE_THREAD_LIBS_INIT} cxxopts::cxxopts)
+target_link_libraries(${TARGET} PRIVATE
+    common
+    llama
+    ${CMAKE_THREAD_LIBS_INIT}
+    Boost::program_options
+)

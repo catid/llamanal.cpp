@@ -24,21 +24,29 @@ I'd recommend running this on a computer with 64GB of RAM.
 ## Setup
 
 ```bash
+# Install dependencies
 sudo apt-get update
 sudo apt-get install -y git cmake g++ make libboost-all-dev
 
+# For C++ analysis
+sudo apt-get install libclang-dev clang-15
+
+# Clone repo
 git clone https://github.com/catid/llamanal.cpp
 cd ./llamanal.cpp/
 
+# Download 65B model
+sudo apt install git-lfs
+git lfs install
+git clone https://huggingface.co/CRD716/ggml-LLaMa-65B
+mv ggml-LLaMa-65B/ggml-LLaMa-65B-q4_0.bin ./models/
+rm -rf ggml-LLaMa-65B
+
+# Build the software
 mkdir build
 cd build
 cmake ..
 make -j
-
-sudo apt install git-lfs
-
-git lfs install
-git clone https://huggingface.co/CRD716/ggml-LLaMa-65B
 ```
 
 ## Future Work
