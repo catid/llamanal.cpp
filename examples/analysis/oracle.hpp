@@ -31,6 +31,9 @@ public:
 
 protected:
     llama_context* Context = nullptr;
+
+    // Model context length (2048 for LLaMA)
+    int ContextLength = 0;
 };
 
 

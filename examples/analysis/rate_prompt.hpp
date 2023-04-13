@@ -41,6 +41,11 @@ void create_conversation_template(
 // Returns false if no number was found.
 bool find_first_number_between_0_and_1(const std::string& s, float& out_found);
 
+// If find_first_number_between_0_and_1() returns true,
+// you can use this function to check if the number is complete so that
+// LLM queries can end earlier.
+bool is_number_complete(const std::string& s);
+
 
 } // namespace analysis
 

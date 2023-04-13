@@ -94,5 +94,19 @@ bool find_first_number_between_0_and_1(const std::string& s, float& out_found)
     return false;
 }
 
+bool is_number_complete(const std::string& s)
+{
+    if (s.empty()) {
+        return false;
+    }
+
+    char last_char = s.back();
+    if (last_char != '.' && !std::isdigit(last_char)) {
+        return true;
+    }
+
+    return false;
+}
+
 
 } // namespace analysis

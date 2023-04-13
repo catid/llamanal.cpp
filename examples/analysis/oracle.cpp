@@ -1,5 +1,6 @@
 #include "oracle.hpp"
 #include "logging.hpp"
+#include "rate_prompt.hpp"
 
 // ggml headers
 #include "common.h"
@@ -14,7 +15,9 @@ bool Oracle::Initialize(const std::string& model_path)
 {
     auto lparams = ::llama_context_default_params();
 
-    lparams.n_ctx      = 2048;
+    ContextLength = 2048;
+
+    lparams.n_ctx      = ContextLength;
     lparams.n_parts    = 1;
     lparams.seed       = 666;
     lparams.logits_all = false;
@@ -36,9 +39,47 @@ void Oracle::Shutdown()
 
 bool Oracle::QueryRating(std::string prompt, float& rating)
 {
-    auto tokens = ::llama_tokenize(Context, prompt.c_str(), true);
+    std::vector<llama_token> tokens = ::llama_tokenize(Context, prompt.c_str(), false);
+    const int input_count = static_cast<int>( tokens.size() );
 
-    return false;
+    if (input_count >= ContextLength) {
+        BOOST_LOG_TRIVIAL(error) << "Input is too large to fit in the context window. Tokens=" << input_count;
+        return false;
+    }
+
+    const int NumThreads = 24;
+
+    if (::llama_eval(Context, tokens.data(), 1, 0, NumThreads)) {
+        BOOST_LOG_TRIVIAL(error) << "llama_eval failed";
+        return false;
+    }
+
+    const int max_output_tokens = 4;
+
+    std::string response;
+
+    for (int i = 0; i < max_output_tokens; ++i)
+    {
+        const int32_t top_k = 1;
+        const float top_p = 0.f;
+        const float temp = 0.f;
+        const float repeat_penalty = 0.f;
+
+        llama_token id = ::llama_sample_top_p_top_k(Context, nullptr, 0, top_k, top_p, temp, repeat_penalty);
+
+        if (id == llama_token_eos()) {
+            break;
+        }
+
+        response += ::llama_token_to_str(Context, id);
+
+        bool found = find_first_number_between_0_and_1(response, rating);
+        if (found && is_number_complete(response)) {
+            return true;
+        }
+    }
+
+    return find_first_number_between_0_and_1(response, rating);
 }
 
 
