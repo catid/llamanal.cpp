@@ -2,6 +2,7 @@
 #include "walk_directory.hpp"
 #include "oracle.hpp"
 
+// This is defined by the CMakeLists.txt
 #ifdef ENABLE_CPP_SUPPORT
     #include "cpp_analysis.hpp"
 #endif // ENABLE_CPP_SUPPORT
