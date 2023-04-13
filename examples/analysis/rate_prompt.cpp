@@ -1,4 +1,5 @@
 #include "rate_prompt.hpp"
+#include "logging.hpp"
 
 #include <iostream>
 #include <regex>

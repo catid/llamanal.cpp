@@ -1,10 +1,16 @@
 #include "walk_directory.hpp"
+#include "logging.hpp"
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <filesystem>
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+
+#define ENABLE_MMAP
+
+#ifdef ENABLE_MMAP
+    #include <boost/interprocess/file_mapping.hpp>
+    #include <boost/interprocess/mapped_region.hpp>
+#endif
 
 namespace analysis {
 
@@ -30,14 +36,16 @@ void walk_directory(
             // Check if the file type is supported
             auto it = std::find_if(supported_file_types.begin(), supported_file_types.end(),
                 [&ext](const SupportedFileType& fileType) {
-                    return boost::algorithm::to_lower_copy(fileType.Extension) == ext;
+                    return fileType.Extension == ext;
                 });
 
             if (it == supported_file_types.end()) {
                 // File type is not supported
+                BOOST_LOG_TRIVIAL(debug) << "Skipping unsupported file: " << entry.path().string();
                 continue;
             }
 
+#ifdef ENABLE_MMAP
             // Get the file size
             std::size_t size_bytes = std::filesystem::file_size(entry.path());
 
@@ -53,6 +61,15 @@ void walk_directory(
                 size_bytes,
                 subdirectory_depth
             );
+#else
+            // Call the handler with the file contents
+            it->Handler(
+                entry.path().string(),
+                nullptr,
+                0,
+                subdirectory_depth
+            );
+#endif
         } else if (entry.is_directory()) {
             walk_directory(
                 supported_file_types,

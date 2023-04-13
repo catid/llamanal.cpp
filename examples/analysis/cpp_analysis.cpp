@@ -1,5 +1,5 @@
 #include "cpp_analysis.hpp"
-
+#include "logging.hpp"
 #include "rate_prompt.hpp"
 
 #include <fstream>
@@ -7,6 +7,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <numeric>
+
 #include <clang-c/Index.h>
 
 namespace analysis {
@@ -15,62 +17,122 @@ namespace analysis {
 //------------------------------------------------------------------------------
 // AST Parsing
 
-static bool is_function(CXCursorKind kind) {
-    return kind == CXCursor_CXXMethod || kind == CXCursor_FunctionDecl;
+struct VisitorClientData
+{
+    std::vector<CXCursor> FunctionCursors;
+    std::string ExpectedFilePath;
+};
+
+bool has_function_body(CXCursor cursor) {
+    bool has_body = false;
+    clang_visitChildren(cursor, [](CXCursor child, CXCursor /*parent*/, CXClientData client_data) {
+        bool *has_body = reinterpret_cast<bool *>(client_data);
+        if (clang_getCursorKind(child) == CXCursorKind::CXCursor_CompoundStmt) {
+            *has_body = true;
+            return CXChildVisit_Break;
+        }
+        return CXChildVisit_Continue;
+    }, &has_body);
+
+    return has_body;
 }
 
-CXChildVisitResult visitor(CXCursor cursor, CXCursor /*parent*/, CXClientData client_data) {
-    auto *data = static_cast<std::vector<CXCursor>*>(client_data);
-    CXSourceLocation location = clang_getCursorLocation(cursor);
-    CXFile file;
-    clang_getSpellingLocation(location, &file, nullptr, nullptr, nullptr);
+void functions_in_file(VisitorClientData* data, CXCursor cursor) {
+    auto cursor_visitor = [](CXCursor cursor, CXCursor /*parent*/, CXClientData client_data) {
+        VisitorClientData* data = reinterpret_cast<VisitorClientData*>(client_data);
 
-    if (file && is_function(clang_getCursorKind(cursor))) {
-        data->push_back(clang_getCursorReferenced(cursor));
-    }
+        // If is a class member or free function:
+        auto cursor_kind = clang_getCursorKind(cursor);
+        if (cursor_kind == CXCursorKind::CXCursor_FunctionDecl || cursor_kind == CXCursorKind::CXCursor_CXXMethod) {
+            // If not just a prototype:
+            if (has_function_body(cursor)) {
+                // Get cursor position
+                CXFile cursor_file;
+                unsigned line, column, offset;
+                clang_getSpellingLocation(clang_getCursorLocation(cursor), &cursor_file, &line, &column, &offset);
 
-    return CXChildVisit_Recurse;
+                const char* file_path = clang_getCString(clang_getFileName(cursor_file));
+
+                if (data->ExpectedFilePath == file_path) {
+                    data->FunctionCursors.push_back(cursor);
+                }
+            }
+        } else {
+            functions_in_file(data, cursor);
+        }
+
+        return CXChildVisit_Continue;
+    };
+
+    clang_visitChildren(cursor, cursor_visitor, data);
 }
 
-std::string get_code_block(const CXCursor &cursor, const std::string &file_contents) {
-    CXSourceRange range = clang_getCursorExtent(cursor);
-    CXSourceLocation start = clang_getRangeStart(range);
-    CXSourceLocation end = clang_getRangeEnd(range);
+std::string function_source(const CXCursor& node, const std::string& file_contents) {
+    CXSourceRange extent = clang_getCursorExtent(node);
+    CXSourceLocation start = clang_getRangeStart(extent);
+    CXSourceLocation end = clang_getRangeEnd(extent);
 
     unsigned start_offset, end_offset;
     clang_getSpellingLocation(start, nullptr, nullptr, nullptr, &start_offset);
     clang_getSpellingLocation(end, nullptr, nullptr, nullptr, &end_offset);
 
-    std::string code_block = file_contents.substr(start_offset, end_offset - start_offset);
-    return code_block;
-}
+    std::string func_src = file_contents.substr(start_offset, end_offset - start_offset);
 
-std::vector<CXCursor> extract_functions_from_memory(const char* file_contents, size_t size) {
-    CXIndex index = clang_createIndex(0, 0);
-    CXUnsavedFile unsaved_file = { "in_memory_file.cpp", file_contents, static_cast<unsigned long>(size) };
-    CXTranslationUnit tu = clang_parseTranslationUnit(index, "in_memory_file.cpp", nullptr, 0, &unsaved_file, 1, CXTranslationUnit_None);
+    std::vector<std::string> lines;
+    std::istringstream iss(file_contents.substr(0, start_offset));
+    for (std::string line; std::getline(iss, line);) {
+        lines.push_back(line);
+    }
 
-    std::vector<CXCursor> functions;
-    clang_visitChildren(clang_getTranslationUnitCursor(tu), visitor, &functions);
+    std::vector<std::string> comments;
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        std::string stripped = *it;
+        stripped.erase(0, stripped.find_first_not_of(" \t\n\v\f\r"));
+        stripped.erase(stripped.find_last_not_of(" \t\n\v\f\r") + 1);
 
-    clang_disposeTranslationUnit(tu);
-    clang_disposeIndex(index);
+        if (stripped.rfind("//", 0) == 0 || stripped.rfind("/*", 0) == 0 || stripped.rfind("*/", 0) == stripped.size() - 2) {
+            comments.push_back(*it);
+        } else {
+            break;
+        }
+    }
 
-    return functions;
+    std::reverse(comments.begin(), comments.end());
+    std::string comment_str = std::accumulate(comments.begin(), comments.end(), std::string(),
+        [](const std::string& a, const std::string& b) {
+            return a + (a.length() > 0 ? "\n" : "") + b;
+        });
+
+    return (comment_str.empty() ? "" : comment_str + "\n") + func_src;
 }
 
 void extract_cpp_functions(
+    std::string file_path,
     const char* file_contents,
     size_t size,
     std::function<void(const std::string &)> func_processor)
 {
-    std::string file_contents_str(file_contents, size);
-    std::vector<CXCursor> functions = extract_functions_from_memory(file_contents, size);
+    CXIndex index = clang_createIndex(0, 0);
 
-    for (const auto &function : functions) {
-        std::string code_block = get_code_block(function, file_contents_str);
-        func_processor(code_block);
+    // Create an unsaved file with mmap content
+    // I checked with `strace` and this is actually helping - mmap is being used for the source files.
+    CXUnsavedFile unsaved_file;
+    unsaved_file.Filename = file_path.c_str();
+    unsaved_file.Contents = file_contents;
+    unsaved_file.Length = size;
+
+    CXTranslationUnit tu = clang_parseTranslationUnit(index, file_path.c_str(), nullptr, 0, &unsaved_file, 1, CXTranslationUnit_None);
+
+    VisitorClientData client_data;
+    client_data.ExpectedFilePath = file_path;
+    functions_in_file(&client_data, clang_getTranslationUnitCursor(tu));
+    for (const auto& cursor : client_data.FunctionCursors) {
+        std::string code = function_source(cursor, file_contents);
+        func_processor(code);
     }
+
+    clang_disposeTranslationUnit(tu);
+    clang_disposeIndex(index);
 }
 
 
@@ -127,5 +189,6 @@ void ask_cpp_expert_score(
 
     return create_conversation_template(out_prompt, out_stop_strs, messages, custom_start, user_role, assistant_role);
 }
+
 
 } // namespace analysis

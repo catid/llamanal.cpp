@@ -31,8 +31,10 @@ void init_file_logging()
 
     // Create a rotating file sink up to 10 MB
     boost::shared_ptr<sinks::text_file_backend> backend = boost::make_shared<sinks::text_file_backend>(
-        keywords::file_name = "analysis_%N.log",
-        keywords::rotation_size = 10 * 1024 * 1024
+        keywords::file_name = "analysis_log.md"
+        // We don't want to rotate the file because it will lose data the user probably cares about
+        // e.g. output of analysis
+        //keywords::rotation_size = 10 * 1024 * 1024
     );
 
     // Create an async frontend and attach it to the backend
@@ -51,13 +53,10 @@ void init_file_logging()
     // Create a background thread for logging
     m_file_sink->locked_backend()->auto_flush(true);
 
-    // Always log at debug level to disk
-    m_file_sink->set_filter(logging::trivial::severity >= logging::trivial::debug);
-
     // Add the sink to the logging core
     core->add_sink(m_file_sink);
 
-    BOOST_LOG_TRIVIAL(debug) << "Logging to: analysis_%N.log";
+    BOOST_LOG_TRIVIAL(debug) << "Logging to: analysis_%N.md";
 }
 
 void stop_file_logging()
@@ -76,7 +75,7 @@ void stop_file_logging()
 using console_sink_t = sinks::asynchronous_sink<sinks::text_ostream_backend>;
 static boost::shared_ptr<console_sink_t> m_console_sink;
 
-void init_console_logging()
+void init_console_logging(bool verbose)
 {
     boost::shared_ptr<logging::core> core = logging::core::get();
 
@@ -96,6 +95,12 @@ void init_console_logging()
         boost::log::expressions::format("[%1%] [%2%] %3%")
         % fmtTimeStamp % fmtSeverity % boost::log::expressions::smessage;
     m_console_sink->set_formatter(logFmt);
+
+    if (verbose) {
+        m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
+    } else {
+        m_console_sink->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    }
 
     // Add the sink to the logging core
     core->add_sink(m_console_sink);
@@ -124,13 +129,7 @@ void init_logging(bool verbose)
     // Remove default console sink so we can set our own format
     core->remove_all_sinks();
 
-    if (verbose) {
-        core->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
-    } else {
-        core->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
-    }
-
-    init_console_logging();
+    init_console_logging(verbose);
     init_file_logging();
 
     if (verbose) {

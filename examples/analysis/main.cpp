@@ -36,30 +36,30 @@ void main_analysis(const std::string& path_)
         int subdirectory_depth)
     {
         ++files_checked;
-        BOOST_LOG_TRIVIAL(info) << std::string(subdirectory_depth * 2, ' ') << "* Checking C++ file: " << file_path;
+        BOOST_LOG_TRIVIAL(info) << std::string(subdirectory_depth * 2, ' ') << "* C++: " << file_path;
 
         int functions_checked = 0;
 
         auto func_handler = [&](const std::string &code) {
             ++functions_checked;
-            BOOST_LOG_TRIVIAL(info) << std::string((subdirectory_depth + 1) * 2, ' ') << code;
+            BOOST_LOG_TRIVIAL(debug) << "Function from " << file_path << ":\n```cpp\n" << code << "\n```";
         };
 
-        BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* Checked " << functions_checked << " functions from " << file_path;
+        BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* " << functions_checked << " functions from " << file_path;
 
-        extract_cpp_functions(file_contents, file_length_in_bytes, func_handler);
+        extract_cpp_functions(file_path, file_contents, file_length_in_bytes, func_handler);
     };
 
-    supported_file_types.push_back({".cc", cpp_handler});
-    supported_file_types.push_back({".hh", cpp_handler});
-    supported_file_types.push_back({".ii", cpp_handler});
-    supported_file_types.push_back({".inl", cpp_handler});
-    supported_file_types.push_back({".cpp", cpp_handler});
-    supported_file_types.push_back({".cxx", cpp_handler});
-    supported_file_types.push_back({".hpp", cpp_handler});
-    supported_file_types.push_back({".hxx", cpp_handler});
-    supported_file_types.push_back({".c", cpp_handler});
-    supported_file_types.push_back({".h", cpp_handler});
+    supported_file_types.push_back({"cc", cpp_handler});
+    supported_file_types.push_back({"hh", cpp_handler});
+    supported_file_types.push_back({"ii", cpp_handler});
+    supported_file_types.push_back({"inl", cpp_handler});
+    supported_file_types.push_back({"cpp", cpp_handler});
+    supported_file_types.push_back({"cxx", cpp_handler});
+    supported_file_types.push_back({"hpp", cpp_handler});
+    supported_file_types.push_back({"hxx", cpp_handler});
+    supported_file_types.push_back({"c", cpp_handler});
+    supported_file_types.push_back({"h", cpp_handler});
 #endif // ENABLE_CPP_SUPPORT
 
     // Recursively check all files in the directory

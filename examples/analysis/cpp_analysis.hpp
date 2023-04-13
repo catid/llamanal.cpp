@@ -13,6 +13,7 @@ namespace analysis {
 
 // Extract all CPP functions from a file provided as a memory buffer
 void extract_cpp_functions(
+    std::string file_path,
     const char* file_contents,
     size_t size,
     std::function<void(const std::string &)> func_processor);
