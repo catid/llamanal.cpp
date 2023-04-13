@@ -1,18 +1,17 @@
 #include "logging.hpp"
 #include "walk_directory.hpp"
+#include "oracle.hpp"
 
 #ifdef ENABLE_CPP_SUPPORT
     #include "cpp_analysis.hpp"
 #endif // ENABLE_CPP_SUPPORT
 
+#include <memory>
 #include <boost/program_options.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/filesystem.hpp>
 
 #define DEFAULT_MODEL "../models/ggml-LLaMa-65B-q4_0.bin"
-
-#include "common.h"
-#include "llama.h"
 
 using namespace analysis;
 
@@ -20,7 +19,10 @@ using namespace analysis;
 //------------------------------------------------------------------------------
 // Application
 
-void main_analysis(const std::string& path_, const std::string& model_)
+void main_analysis(
+    const std::string& path_,
+    const std::string& model_,
+    float threshold = 0.5f)
 {
     // Expand ~ and .. type stuff
     BOOST_LOG_TRIVIAL(debug) << "Input path: " << path_;
@@ -30,12 +32,21 @@ void main_analysis(const std::string& path_, const std::string& model_)
     BOOST_LOG_TRIVIAL(debug) << "Canonicalized input path: " << path;
     BOOST_LOG_TRIVIAL(debug) << "Canonicalized input model: " << model;
 
+    // Load the model
+    auto oracle = std::make_shared<Oracle>();
+    if (!oracle->Initialize(model)) {
+        BOOST_LOG_TRIVIAL(error) << "Failed to initialize oracle";
+        return;
+    }
+
     int files_checked = 0;
 
     std::vector<SupportedFileType> supported_file_types;
 
 #ifdef ENABLE_CPP_SUPPORT
     BOOST_LOG_TRIVIAL(debug) << "Enabled C++ support.";
+
+    int total_bugs = 0;
 
     auto cpp_handler = [&](
         const std::string& file_path,
@@ -47,22 +58,35 @@ void main_analysis(const std::string& path_, const std::string& model_)
         BOOST_LOG_TRIVIAL(info) << std::string(subdirectory_depth * 2, ' ') << "* C++: " << file_path;
 
         int functions_checked = 0;
+        int file_bugs = 0;
 
         auto func_handler = [&](const std::string &code) {
             ++functions_checked;
-            BOOST_LOG_TRIVIAL(trace) << "Function from " << file_path << ":\n```cpp\n" << code << "\n```";
 
             // Generate prompt for LLM
             std::string prompt;
             std::vector<std::string> stop_strs;
             ask_cpp_expert_score(prompt, stop_strs, code);
 
-            //auto tokens = ::llama_tokenize(ctx, params.prompt, true);
+            float rating = 0.f;
+            if (!oracle->QueryRating(prompt, rating)) {
+                BOOST_LOG_TRIVIAL(trace) << "Failed to rate a function from " << file_path << ":\n```cpp\n" << code << "\n```";
+            } else if (rating < threshold) {
+                BOOST_LOG_TRIVIAL(warning) << "Potential bug found in function from " << file_path << " scored " << rating << ":\n```cpp\n" << code << "\n```";
+                ++file_bugs;
+                ++total_bugs;
+            } else {
+                BOOST_LOG_TRIVIAL(trace) << "Function from " << file_path << " scored " << rating << ":\n```cpp\n" << code << "\n```";
+            }
         };
 
         extract_cpp_functions(file_path, file_contents, file_length_in_bytes, func_handler);
 
-        BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* " << functions_checked << " functions from " << file_path;
+        if (file_bugs > 0) {
+            BOOST_LOG_TRIVIAL(warning) << std::string(subdirectory_depth * 2, ' ') << "* Found " << file_bugs << " functions with bugs of " << functions_checked << " functions from " << file_path;
+        } else {
+            BOOST_LOG_TRIVIAL(debug) << std::string(subdirectory_depth * 2, ' ') << "* " << functions_checked << " functions from " << file_path;
+        }
     };
 
     supported_file_types.push_back({"cc", cpp_handler});
@@ -82,8 +106,10 @@ void main_analysis(const std::string& path_, const std::string& model_)
 
     if (files_checked <= 0) {
         BOOST_LOG_TRIVIAL(warning) << "No supported source files found in " << path;
+    } else if (total_bugs <= 0) {
+        BOOST_LOG_TRIVIAL(info) << "Checked " << files_checked << " files in " << path << " and found no bugs.";
     } else {
-        BOOST_LOG_TRIVIAL(info) << "Analysis complete!  Checked " << files_checked << " files in " << path;
+        BOOST_LOG_TRIVIAL(warning) << "Bugs found!  Checked " << files_checked << " files in " << path << " and found " << total_bugs << " bugs.";
     }
 }
 
@@ -113,6 +139,7 @@ int main(int argc, char* argv[]) {
         desc.add_options()
             ("help,h", "Print usage")
             ("verbose,v", po::value(&verbose_level)->zero_tokens(), "Increase verbosity of logging (can be specified multiple times)")
+            ("threshold,t", po::value<float>()->default_value(0.5f), "Minimum threshold to declare a bug.  Values lower than this indicate a bug that should be reported.")
             ("path,p", po::value<std::string>(), "Path to the directory or file")
             ("model,m", "Path to the model file.  Default: " DEFAULT_MODEL)
         ;
@@ -126,6 +153,7 @@ int main(int argc, char* argv[]) {
 
         std::string path = vm.count("path") > 0 ? vm["path"].as<std::string>() : "";
         std::string model = vm.count("model") > 0 ? vm["model"].as<std::string>() : DEFAULT_MODEL;
+        float threshold = vm["threshold"].as<float>();
 
         int verbose = verbose_level.count;
 
@@ -139,7 +167,7 @@ int main(int argc, char* argv[]) {
             return -1;
         }
 
-        main_analysis(path, model);
+        main_analysis(path, model, threshold);
     } catch (const po::error& e) {
         BOOST_LOG_TRIVIAL(error) << "Error parsing options: " << e.what() << std::endl;
         return -2;

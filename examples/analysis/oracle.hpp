@@ -3,6 +3,9 @@
 
 #include <string>
 
+// ggml headers
+#include "llama.h"
+
 namespace analysis {
 
 
@@ -21,10 +24,13 @@ public:
         Shutdown();
     }
 
-    bool Initialize();
+    bool Initialize(const std::string& model_path);
     void Shutdown();
 
     bool QueryRating(std::string prompt, float& rating);
+
+protected:
+    llama_context* Context = nullptr;
 };
 
 
